@@ -25,6 +25,7 @@ const GPT_STATUS_ROUTE = '/dsh-pet/gpt/status'
 const GPT_INSTALL_ROUTE = '/dsh-pet/gpt/install'
 const GPT_START_ROUTE = '/dsh-pet/gpt/start'
 const GPT_CANCEL_ROUTE = '/dsh-pet/gpt/cancel'
+const GPT_AUTOSTART_ROUTE = '/dsh-pet/gpt/autostart'
 const TTS_VOICES_ROUTE = '/dsh-pet/tts/voices'
 const TMP_DIR = path.join(os.tmpdir(), 'dsh-pet-voice')
 
@@ -534,6 +535,26 @@ export default {
         },
       }, 'gpt-cancel')
 
+      // 自启动开关：开机随 Windows 登录 / 随 DSH 启动自动拉起 9880
+      register({
+        kind: 'exact',
+        path: GPT_AUTOSTART_ROUTE,
+        handler: async (req, res) => {
+          try {
+            if (req.method === 'POST') {
+              const body = await readBody(req, 8 * 1024)
+              let payload = {}
+              try { payload = JSON.parse(body.toString('utf8') || '{}') } catch (e) { payload = {} }
+              json(res, 200, await gpt.setAutoStart(payload))
+              return
+            }
+            json(res, 200, await gpt.autostartStatus())
+          } catch (err) {
+            json(res, 500, { ok: false, error: String((err && err.message) || err).slice(0, 300) })
+          }
+        },
+      }, 'gpt-autostart')
+
       if (typeof webServer.tapIndex === 'function') {
         disposers.push(webServer.tapIndex((html) => {
           try {
@@ -548,5 +569,13 @@ export default {
         }))
       }
     })
+
+    // ⑥ 随 DSH 一起把语音服务拉起来（开关在 ⚙ 面板里）：延迟几秒，别跟启动抢资源
+    const bootTimer = setTimeout(() => {
+      gpt.bootstrap((msg) => { try { console.log('[pet-voice] ' + msg) } catch (e) {} })
+        .catch(() => {})
+    }, 6000)
+    if (typeof bootTimer.unref === 'function') bootTimer.unref()
+    disposers.push(() => clearTimeout(bootTimer))
   },
 }

@@ -43,6 +43,7 @@ const EXPECTED = [
   '/dsh-pet/gpt/install',
   '/dsh-pet/gpt/start',
   '/dsh-pet/gpt/cancel',
+  '/dsh-pet/gpt/autostart',
 ]
 assert.equal(handlers.length, EXPECTED.length, '应注册 ' + EXPECTED.length + ' 条路由，实际 ' + handlers.length)
 for (const p of EXPECTED) assert.ok(handlers.find((h) => h.path === p), '缺少路由 ' + p)

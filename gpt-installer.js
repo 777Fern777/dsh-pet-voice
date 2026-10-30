@@ -170,8 +170,101 @@ export async function apiRunning(port = 9880) {
   }
 }
 
+// —— 自启动开关：开机随 Windows 登录起 / 随 DSH 启动拉起 ——
+const STATE_DIR = path.join(os.homedir(), '.dsh-pet-voice')
+const STATE_FILE = path.join(STATE_DIR, 'state.json')
+
+async function readState() {
+  try {
+    const raw = await fsp.readFile(STATE_FILE, 'utf8')
+    const obj = JSON.parse(raw)
+    return {
+      bootOnLogin: !!obj.bootOnLogin,
+      bootWithDsh: obj.bootWithDsh !== false,
+      dir: typeof obj.dir === 'string' ? obj.dir : '',
+    }
+  } catch (e) {
+    return { bootOnLogin: false, bootWithDsh: true, dir: '' }
+  }
+}
+
+async function writeState(patch) {
+  const cur = await readState()
+  const next = { ...cur, ...patch }
+  await fsp.mkdir(STATE_DIR, { recursive: true })
+  await fsp.writeFile(STATE_FILE, JSON.stringify(next, null, 2), 'utf8')
+  return next
+}
+
+function startupDir() {
+  const appData = process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming')
+  return path.join(appData, 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup')
+}
+
+function loginScriptPath() {
+  return path.join(startupDir(), 'dsh-pet-gpt.vbs')
+}
+
+export async function autostartStatus() {
+  const state = await readState()
+  let registered = false
+  try { await fsp.access(loginScriptPath()); registered = true } catch (e) {}
+  return { ok: true, ...state, loginScript: loginScriptPath(), loginRegistered: registered }
+}
+
+export async function setAutoStart(patch) {
+  // 允许顺手设置「已装好的目录」，这样自己装在 D 盘的人不用重下 8GB
+  if (typeof patch.dir === 'string') {
+    await writeState({ dir: patch.dir.trim() })
+  }
+  const root = await locateRoot(job.dir || (await configuredDir()))
+  // 还没装整合包就谈不上开机自启，直接拒掉，别留一个「开着但没生效」的假状态
+  if (patch.bootOnLogin === true && !root) {
+    await writeState({ bootOnLogin: false })
+    return { ...(await autostartStatus()), error: 'not-installed', hint: '先装好 GPT-SoVITS 再打开自启动' }
+  }
+  const next = await writeState({
+    ...(typeof patch.bootOnLogin === 'boolean' ? { bootOnLogin: patch.bootOnLogin } : {}),
+    ...(typeof patch.bootWithDsh === 'boolean' ? { bootWithDsh: patch.bootWithDsh } : {}),
+  })
+  if (next.bootOnLogin && root) {
+    const bat = await writeLauncher(root)
+    // VBS 里引号要写成两个；0 = 隐藏窗口，False = 不等它结束
+    const vbs = [
+      'Set sh = CreateObject("WScript.Shell")',
+      'sh.CurrentDirectory = "' + root + '"',
+      'sh.Run """' + bat + '""", 0, False',
+    ].join('\r\n')
+    await fsp.mkdir(startupDir(), { recursive: true })
+    await fsp.writeFile(loginScriptPath(), vbs + '\r\n', 'utf8')
+  } else {
+    try { await fsp.unlink(loginScriptPath()) } catch (e) {}
+  }
+  return await autostartStatus()
+}
+
+// DSH 启动时调用：装了、开关开着、9880 没响应 → 悄悄把它拉起来
+export async function bootstrap(log = () => {}) {
+  const state = await readState()
+  if (!state.bootWithDsh) return { started: false, reason: 'disabled' }
+  const root = await locateRoot(job.dir || (await configuredDir()))
+  if (!root) return { started: false, reason: 'not-installed' }
+  const running = await apiRunning()
+  if (running.running) return { started: false, reason: 'already-running' }
+  log('检测到语音服务没开，随 DSH 一起拉起：' + root)
+  const r = await start(root)
+  return { started: !!r.ok, result: r }
+}
+
+// 用户已经自己装过（比如装到 D 盘）时，让他把目录填进来，别逼他重下 8GB
+export async function configuredDir() {
+  const state = await readState()
+  if (state.dir && state.dir.trim()) return state.dir.trim()
+  return defaultDir()
+}
+
 export async function status() {
-  const dir = job.dir || defaultDir()
+  const dir = job.dir || (await configuredDir())
   let installed = false
   let root = null
   let launcher = null
@@ -290,7 +383,7 @@ export function cancel() {
 }
 
 export async function start(rootOverride) {
-  const root = rootOverride || (await locateRoot(job.dir || defaultDir()))
+  const root = rootOverride || (await locateRoot(job.dir || (await configuredDir())))
   if (!root) return { ok: false, error: '还没装好，找不到 api_v2.py' }
   const running = await apiRunning()
   if (running.running) return { ok: true, already: true, api: running }

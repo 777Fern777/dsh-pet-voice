@@ -32,8 +32,10 @@
 ### 方式 A：从 GitHub 源码装（推荐）
 
 ```bash
-git clone https://github.com/<你的用户名>/dsh-pet-voice.git
+git clone https://github.com/777Fern777/dsh-pet-voice.git
 ```
+或者直接在DSH 添加插件 https://github.com/777Fern777/dsh-pet-voice.git
+
 
 然后让 DSH 装上它（二选一）：
 

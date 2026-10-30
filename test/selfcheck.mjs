@@ -39,6 +39,10 @@ const EXPECTED = [
   '/dsh-pet/tts',
   '/dsh-pet/tts/voices',
   '/dsh-pet/tts/custom',
+  '/dsh-pet/gpt/status',
+  '/dsh-pet/gpt/install',
+  '/dsh-pet/gpt/start',
+  '/dsh-pet/gpt/cancel',
 ]
 assert.equal(handlers.length, EXPECTED.length, '应注册 ' + EXPECTED.length + ' 条路由，实际 ' + handlers.length)
 for (const p of EXPECTED) assert.ok(handlers.find((h) => h.path === p), '缺少路由 ' + p)

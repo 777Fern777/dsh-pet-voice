@@ -69,8 +69,13 @@
   .dshpet-btn.on{background:rgba(80,200,140,.45);color:#eafff4}
   .dshpet-btn:disabled{opacity:.4;cursor:not-allowed}
   .dshpet-panel{background:rgba(20,24,30,.96);border:1px solid rgba(120,190,255,.3);border-radius:12px;
-    padding:9px 10px;font-size:11px;color:#cfe6ff;display:flex;flex-direction:column;gap:7px;width:210px;
+    padding:10px 12px;font-size:11px;color:#cfe6ff;display:grid;gap:8px 14px;align-items:start;
+    grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
+    width:min(560px,calc(100vw - 48px));max-height:min(66vh,520px);overflow:auto;
     box-shadow:0 8px 24px rgba(0,0,0,.42)}
+  .dshpet-panel > .dshpet-panel-row,.dshpet-panel > .dshpet-hint,.dshpet-panel > #dshpet-custom{grid-column:1/-1}
+  .dshpet-panel > #dshpet-custom{display:grid;gap:8px 14px;grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
+  .dshpet-panel > #dshpet-custom[hidden]{display:none}
   .dshpet-panel[hidden]{display:none}
   .dshpet-panel label{display:flex;flex-direction:column;gap:3px;line-height:1.3}
   .dshpet-panel select,.dshpet-panel input[type=range],.dshpet-panel input[type=text],.dshpet-panel textarea{width:100%;font-size:11px;background:rgba(255,255,255,.08);
@@ -82,7 +87,6 @@
     padding:4px 6px;font-size:11px;cursor:pointer}
   .dshpet-panel-row button:hover{background:rgba(80,160,240,.42)}
   .dshpet-hint{opacity:.62;font-size:10px;line-height:1.35}
-  .dshpet-speech-log{opacity:.72;font-size:10px;line-height:1.4;white-space:pre-wrap;word-break:break-all;max-height:88px;overflow:auto;background:rgba(0,0,0,.22);border:1px solid rgba(255,255,255,.12);border-radius:6px;padding:5px 6px;font-family:ui-monospace,Consolas,monospace}
   `
 
   function injectCss() {
@@ -182,9 +186,9 @@
         <div class="dshpet-hint" id="dshpet-speech-hint">朗读状态：读取中……</div>
         <div class="dshpet-panel-row">
           <button id="dshpet-probe">体检朗读链路</button>
-          <button id="dshpet-test-speak">测试朗读</button>
+          <button id="dshpet-gsv">装 GPT-SoVITS</button>
         </div>
-        <div class="dshpet-speech-log" id="dshpet-speech-log">朗读日志：（空）</div>
+        <div class="dshpet-hint" id="dshpet-gsv-hint" hidden></div>
         <div class="dshpet-hint">音色不够用就在 Windows「设置 → 时间和语言 → 语音」里装中文语音包，装完点 ⚙ 会自己读到。识别引擎自动：优先本机 SenseVoice 模型（准），没好就先用 Windows SAPI 顶着。</div>
       </div>
       <div class="dshpet-bubble" id="dshpet-bubble"></div>
@@ -300,14 +304,7 @@
       ensureAudible()
       feedSpeech('try-' + Date.now(), sample, true)
     }
-    // 测试朗读：走和真回答完全同一条流水线，用来分清「没抓到回答」还是「播不出来」
-    const testBtn = root.querySelector('#dshpet-test-speak')
-    if (testBtn) testBtn.onclick = () => {
-      ensureAudible()
-      logSpeech('手动测试朗读')
-      feedSpeech('test-' + Date.now(), '这是测试朗读，一二三四五。', true)
-    }
-    // 显式的「试听 / 测试朗读」永远应该出声：静音状态下自己开嗓，省得以为坏了
+    // 显式的「试听」永远应该出声：静音状态下自己开嗓，省得以为坏了
     function ensureAudible() {
       if (cfg.ttsEnabled) return
       cfg.ttsEnabled = true
@@ -338,6 +335,132 @@
         updateSpeechHint('请求失败：' + String((err && err.message) || err).slice(0, 90))
       }
     }
+    // —— 一键装 GPT-SoVITS：第一次点只是问一句，30 秒内再点一次才真下载（4GB+，不能误触）——
+    let gsvArmedAt = 0
+    let gsvPoll = null
+    const gsvHint = () => root.querySelector('#dshpet-gsv-hint')
+    function gsvSay(text) {
+      const el = gsvHint()
+      if (el) { el.hidden = false; el.textContent = text }
+    }
+    function humanBytes(n) {
+      if (!n) return '0MB'
+      if (n > 1024 ** 3) return (n / 1024 ** 3).toFixed(2) + 'GB'
+      return Math.round(n / 1024 ** 2) + 'MB'
+    }
+    function useGsvEndpoint() {
+      cfg.engine = 'custom'
+      cfg.customEndpoint = 'http://127.0.0.1:9880/tts'
+      saveCfg()
+      if (customUrlEl) customUrlEl.value = cfg.customEndpoint
+      syncEngineUi()
+      updateSpeechHint('引擎已切到自定义 TTS')
+    }
+    function stopGsvPoll() {
+      if (gsvPoll) { clearInterval(gsvPoll); gsvPoll = null }
+    }
+    async function gsvStatus() {
+      const resp = await fetch(GPT_STATUS_URL, { headers: { Accept: 'application/json' } })
+      if (resp.status === 404) {
+        const e = new Error('NEED_RESTART')
+        e.needRestart = true
+        throw e
+      }
+      if (!resp.ok) throw new Error('HTTP ' + resp.status)
+      return await resp.json()
+    }
+    async function pollGsv() {
+      try {
+        const st = await gsvStatus()
+        const job = st.job || {}
+        if (job.state === 'running') {
+          const pct = job.percent != null ? job.percent + '%' : humanBytes(job.bytes)
+          gsvSay((job.phase === 'extracting' ? '解压中……' : '下载中 ' + pct) + '\n' + (job.message || ''))
+          return
+        }
+        if (job.state === 'error') { gsvSay('装失败了：' + (job.error || job.message || '未知原因')); stopGsvPoll(); return }
+        if (job.state === 'cancelled') { gsvSay('已取消'); stopGsvPoll(); return }
+        if (st.installed) {
+          if (st.api && st.api.running) {
+            stopGsvPoll()
+            useGsvEndpoint()
+            gsvSay('GPT-SoVITS 正在跑（9880），已经接上这个宠物了。\n目录：' + st.root)
+            say('哼，音色克隆服务接好了。', 5000)
+          } else {
+            gsvSay('装好了，但服务还没起。再点一次按钮启动它。\n' + st.root)
+            stopGsvPoll()
+          }
+          return
+        }
+        stopGsvPoll()
+        gsvSay('还没装。点按钮开始下载整合包。')
+      } catch (err) {
+        if (err && err.needRestart) {
+          stopGsvPoll()
+          gsvSay('这个按钮要重启一次 DSH 才生效（新接口刚加进去）。\n关掉 DSH 再打开、刷新页面就行了。')
+          return
+        }
+        gsvSay('查状态失败：' + String((err && err.message) || err).slice(0, 80))
+      }
+    }
+    root.querySelector('#dshpet-gsv').onclick = async () => {
+      const btn = root.querySelector('#dshpet-gsv')
+      try {
+        const st = await gsvStatus()
+        const job = st.job || {}
+        if (job.state === 'running') {
+          if (confirm('正在装/下载，点确定就取消这个任务？')) {
+            await fetch(GPT_CANCEL_URL, { method: 'POST' })
+            gsvSay('已取消')
+          }
+          stopGsvPoll()
+          gsvPoll = setInterval(pollGsv, 2000)
+          return
+        }
+        if (st.installed) {
+          if (st.api && st.api.running) {
+            useGsvEndpoint()
+            gsvSay('服务已经在跑，已经接上了。')
+            return
+          }
+          gsvSay('正在启动 GPT-SoVITS（首次加载模型要几十秒）……')
+          const r = await (await fetch(GPT_START_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ root: st.root || '' }),
+          })).json()
+          if (!r.ok) { gsvSay('启动失败：' + (r.error || '未知')); return }
+          stopGsvPoll()
+          gsvPoll = setInterval(pollGsv, 3000)
+          return
+        }
+        const now = Date.now()
+        if (now - gsvArmedAt > 30000) {
+          gsvArmedAt = now
+          gsvSay('要下载 GPT-SoVITS 整合包（约 8GB，解压后 14GB）。\n30 秒内再点一次「装 GPT-SoVITS」就开始。')
+          return
+        }
+        gsvArmedAt = 0
+        gsvSay('开始下载……（可以把这个面板收起来，任务在后台跑）')
+        const r = await (await fetch(GPT_INSTALL_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ dir: '' }),
+        })).json()
+        if (!r.ok) { gsvSay('启动下载失败：' + (r.error || '未知')); return }
+        stopGsvPoll()
+        gsvPoll = setInterval(pollGsv, 2500)
+      } catch (err) {
+        if (err && err.needRestart) {
+          gsvSay('这个按钮要重启一次 DSH 才生效（新接口刚加进去）。\n关掉 DSH 再打开、刷新页面就行了。')
+          return
+        }
+        gsvSay('出错了：' + String((err && err.message) || err).slice(0, 100))
+      } finally {
+        if (btn) btn.blur()
+      }
+    }
+
     root.querySelector('#dshpet-close').onclick = () => {
       panelEl.hidden = true
       gearBtn.classList.remove('on')
@@ -794,8 +917,6 @@
     const t = new Date().toLocaleTimeString('zh-CN', { hour12: false })
     speechLog.push(t + ' ' + msg)
     if (speechLog.length > 80) speechLog.shift()
-    const box = root && root.querySelector('#dshpet-speech-log')
-    if (box) box.textContent = '朗读日志：\n' + speechLog.slice(-6).join('\n')
     try { console.log('[pet-voice]', msg) } catch (e) {}
   }
 
@@ -1191,6 +1312,10 @@
   const TTS_CUSTOM_URL = '/dsh-pet/tts/custom'
   const TTS_VOICES_URL = '/dsh-pet/tts/voices'
   const ASR_STATUS_URL = '/dsh-pet/asr/status'
+  const GPT_STATUS_URL = '/dsh-pet/gpt/status'
+  const GPT_INSTALL_URL = '/dsh-pet/gpt/install'
+  const GPT_START_URL = '/dsh-pet/gpt/start'
+  const GPT_CANCEL_URL = '/dsh-pet/gpt/cancel'
   let audioEl = null
   let ttsSeq = 0
   let voicesLoaded = false

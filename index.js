@@ -4,12 +4,14 @@
 //   ② tapIndex（web 形态）+ webserver/index-inject（桌面端形态）把 <script> 塞进 index.html；
 //   ③ POST /dsh-pet/asr：优先用 DSH 官方 speechToText 服务（SenseVoice 本地模型，准），
 //      官方服务还没准备好时退回 Windows SAPI（System.Speech）本地识别；
-//   ④ GET /dsh-pet/tts/voices + POST /dsh-pet/tts：Windows SAPI 合成 WAV，音色可选、语速可调。
+//   ④ GET /dsh-pet/tts/voices + POST /dsh-pet/tts：Windows SAPI 合成 WAV，音色可选、语速可调；
+//   ⑤ /dsh-pet/gpt/*：一键下载解压 GPT-SoVITS 整合包并拉起 api_v2.py（音色克隆用）。
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { spawn } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
+import * as gpt from './gpt-installer.js'
 
 const PACKAGE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)))
 const SCRIPT_PATH = path.join(PACKAGE_ROOT, 'client.js')
@@ -19,6 +21,10 @@ const ASR_STATUS_ROUTE = '/dsh-pet/asr/status'
 const ASR_PREPARE_ROUTE = '/dsh-pet/asr/prepare'
 const TTS_ROUTE = '/dsh-pet/tts'
 const TTS_CUSTOM_ROUTE = '/dsh-pet/tts/custom'
+const GPT_STATUS_ROUTE = '/dsh-pet/gpt/status'
+const GPT_INSTALL_ROUTE = '/dsh-pet/gpt/install'
+const GPT_START_ROUTE = '/dsh-pet/gpt/start'
+const GPT_CANCEL_ROUTE = '/dsh-pet/gpt/cancel'
 const TTS_VOICES_ROUTE = '/dsh-pet/tts/voices'
 const TMP_DIR = path.join(os.tmpdir(), 'dsh-pet-voice')
 
@@ -470,6 +476,63 @@ export default {
           }
         },
       }, 'tts-custom')
+
+      // —— GPT-SoVITS 一键装：下载整合包 → 解压 → 写启动脚本 → 拉起 api_v2.py ——
+      register({
+        kind: 'exact',
+        path: GPT_STATUS_ROUTE,
+        handler: async (req, res) => {
+          try { json(res, 200, await gpt.status()) } catch (err) {
+            json(res, 500, { ok: false, error: String((err && err.message) || err).slice(0, 300) })
+          }
+        },
+      }, 'gpt-status')
+
+      register({
+        kind: 'exact',
+        path: GPT_INSTALL_ROUTE,
+        handler: async (req, res) => {
+          if (req.method !== 'POST') { json(res, 405, { ok: false, error: 'method-not-allowed' }); return }
+          try {
+            const body = await readBody(req, 64 * 1024)
+            let payload = {}
+            try { payload = JSON.parse(body.toString('utf8') || '{}') } catch (e) { payload = {} }
+            const dir = String(payload.dir || '').trim()
+            if (dir && !/^[A-Za-z]:[\\/]|^\//.test(dir)) {
+              json(res, 400, { ok: false, error: 'bad-dir', hint: '要填绝对路径，例如 D:/GPT-SoVITS' })
+              return
+            }
+            json(res, 200, await gpt.install(dir))
+          } catch (err) {
+            json(res, 500, { ok: false, error: String((err && err.message) || err).slice(0, 300) })
+          }
+        },
+      }, 'gpt-install')
+
+      register({
+        kind: 'exact',
+        path: GPT_START_ROUTE,
+        handler: async (req, res) => {
+          if (req.method !== 'POST') { json(res, 405, { ok: false, error: 'method-not-allowed' }); return }
+          try {
+            const body = await readBody(req, 64 * 1024)
+            let payload = {}
+            try { payload = JSON.parse(body.toString('utf8') || '{}') } catch (e) { payload = {} }
+            json(res, 200, await gpt.start(String(payload.root || '').trim() || null))
+          } catch (err) {
+            json(res, 500, { ok: false, error: String((err && err.message) || err).slice(0, 300) })
+          }
+        },
+      }, 'gpt-start')
+
+      register({
+        kind: 'exact',
+        path: GPT_CANCEL_ROUTE,
+        handler: (req, res) => {
+          if (req.method !== 'POST') { json(res, 405, { ok: false, error: 'method-not-allowed' }); return }
+          json(res, 200, gpt.cancel())
+        },
+      }, 'gpt-cancel')
 
       if (typeof webServer.tapIndex === 'function') {
         disposers.push(webServer.tapIndex((html) => {

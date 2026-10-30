@@ -1,4 +1,4 @@
-# 大肥鱼语音桌面宠物 · dsh-pet-voice
+# 大肥鱼语音交互-声音可自配！ · dsh-pet-voice
 
 给 [DeepSeek Harness](https://github.com/deepseek-ai)（DSH）装的桌面宠物插件：屏幕右下角蹲着一只小宠物，**点一下就能说话**——说的话自动识别成文字填进对话框并发出去，助手回答完再用语音念给你听。
 

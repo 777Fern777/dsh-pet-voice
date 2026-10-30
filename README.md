@@ -137,43 +137,6 @@ cordis.patch.yml  bundle 声明（id: pet-voice）
 assets/           形象图片；tools/ 抠图脚本
 ```
 
-宿主插件必须是 `export default { name, apply(root) }`——写成 `init(ctx)` 时加载器只会报 `failed to import`，不给原因。
-
-## 能不能给别的 harness 用
-
-**直接装不行，移植很轻。** 这个包是 *cordis 插件*（DSH 的插件形态），依赖四样 DSH 独有的东西：
-
-| 依赖 | 用途 | 换 harness 时怎么办 |
-| --- | --- | --- |
-| `webServer.register` / `tapIndex` / `webserver/index-inject` | 注入 `<script>` 并把 `/dsh-pet/*` 接口挂到页面上 | 换成任何能在目标页面注入脚本的手段：Tampermonkey、浏览器扩展、或本地反代 |
-| `speechToText` 服务 | 官方 SenseVoice 本地识别 | 有就接，没有就退回 Windows SAPI（`index.js` 里已经是 try/catch 兜底） |
-| 聊天流 DOM（`[data-chat-flow-kind="assistant-step"]`、`[data-composer-input]`） | 只念回答正文、把文字填进输入框 | 换成目标 harness 的选择器（一个 `ANSWER_SELECTOR` + 一个输入框选择器） |
-| DSH 的 4 个 HTTP 路由 | 识别 / 朗读 / 音色 / TTS 代理 | 这几段是**纯 Node**，不依赖 cordis，可以直接塞进自己的小服务器 |
-
-也就是说：`client.js`（UI + 录音 + 句子流水线 + 朗读）和 `index.js` 里的 ASR/TTS 实现都是可复用的，**换 harness ≈ 写 100 行适配层**：一个独立 `node server.mjs` 起那几条接口，再用注入手段把 `client.js` 塞进对方的 Web UI，改两个选择器。
-
-对 **CLI 类工具**（纯终端、没有网页界面）就没意义了——没有 DOM 可以贴宠物、也没有输入框可以填。
-
-## 发布到 GitHub
-
-```bash
-# 1. 先在 GitHub 网页上建一个空仓库（别勾 README / .gitignore / license）
-cd pet-pet
-git remote add origin https://github.com/<你的用户名>/dsh-pet-voice.git
-git branch -M main
-git push -u origin main
-```
-
-别人装上：
-
-```bash
-git clone https://github.com/<你的用户名>/dsh-pet-voice.git
-# 然后让 DSH 装：plugin_manager install_bundle target=link:<克隆下来的绝对路径>
-# 或者手工改 profile 的 package.json（见上面「安装」一节），最后重启一次 DSH
-```
-
-想发 npm（可选）：把 `package.json` 里的 `repository` / `homepage` / `bugs` 补上，然后 `npm publish --access public`，别人就能用 `install_bundle target=@pet-fish/dsh-pet-voice` 装。
-
 ## License
 
 MIT。`assets/src.png` 是使用者提供的角色立绘，随代码一起分发；如果你要商用或再分发，请自行确认版权归属。

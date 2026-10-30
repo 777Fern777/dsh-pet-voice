@@ -6,8 +6,14 @@ new Function(src)
 console.log('client.js 语法 OK，字节', Buffer.byteLength(src))
 
 const PORT = process.argv[2] || '59584'
-const REF = process.argv[3] || 'D:/GPT-SoVITS-v2pro-20261006/voices/ref_test.wav'
-const PROMPT = process.argv[4] || '今天天气不错，我们一起出去玩吧。'
+// 参考音频没有默认值：用你自己的 3–10 秒干声 wav 传进来
+const REF = process.argv[3] || process.env.PET_REF_AUDIO || ''
+const PROMPT = process.argv[4] || process.env.PET_REF_TEXT || ''
+if (!REF) {
+  console.log('用法：node test/gsv-check.mjs <DSH端口> <参考音频绝对路径> "<参考文字>"')
+  console.log('（只想检查 client.js 语法的话，到这里就够了）')
+  process.exit(0)
+}
 
 const cfg = { customEndpoint: 'http://127.0.0.1:9880/tts', customRefAudio: REF, customPromptText: PROMPT, customLang: 'auto', customPromptLang: 'ja', ttsRate: 1.05 }
 // 与 client.js 里 speakCustom 的模板拼装保持一致

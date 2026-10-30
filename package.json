@@ -1,0 +1,38 @@
+{
+  "name": "@pet-fish/dsh-pet-voice",
+  "version": "1.9.1",
+  "description": "大肥鱼语音桌面宠物：浮动小宠物，点一下说话，自动填入并发送到 DSH 对话框，回复只念回答正文并用语音说出来",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": {
+      "default": "./index.js"
+    }
+  },
+  "keywords": [
+    "pet",
+    "voice",
+    "speech",
+    "tts",
+    "asr",
+    "desktop-pet",
+    "dsh-bundle",
+    "deepseek-harness",
+    "cordis"
+  ],
+  "license": "MIT",
+  "files": [
+    "index.js",
+    "client.js",
+    "cordis.patch.yml",
+    "icon.svg",
+    "locale/",
+    "assets/pet.png",
+    "README.md"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  }
+}

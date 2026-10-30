@@ -1,0 +1,8 @@
+{
+  "title": "大肥鱼桌面宠物",
+  "description": "桌面宠物插件，点击宠物可触发语音输入；AI 回复会朗读出来。",
+  "petName": "大肥鱼",
+  "startListeningLabel": "点我说话",
+  "listeningLabel": "正在听……（说完点一下）",
+  "stopListeningLabel": "停止"
+}

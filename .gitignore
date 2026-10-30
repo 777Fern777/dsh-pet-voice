@@ -1,0 +1,17 @@
+node_modules/
+npm-debug.log*
+yarn-error.log*
+.pnpm-store/
+
+# 测试产物（合成的 wav、临时 dump）
+test/*.wav
+test/*.json
+test/out_*.wav
+*.log
+
+# 系统 / 编辑器
+Thumbs.db
+desktop.ini
+.DS_Store
+.vscode/
+.idea/

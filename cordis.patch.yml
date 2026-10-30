@@ -1,0 +1,4 @@
+- insert:
+    - id: pet-voice
+      name: '@pet-fish/dsh-pet-voice'
+      disabled: false

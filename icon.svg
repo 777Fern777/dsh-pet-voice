@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 120 120">
+  <rect width="120" height="120" rx="20" fill="#fff8e1" stroke="#d49a00" stroke-width="4"/>
+  <ellipse cx="60" cy="60" rx="40" ry="30" fill="#ffd966" stroke="#d49a00" stroke-width="3"/>
+  <circle cx="52" cy="55" r="5.5" fill="#333"/>
+  <circle cx="68" cy="55" r="5.5" fill="#333"/>
+  <path d="M 45 68 Q 60 80 75 68" stroke="#d49a00" stroke-width="3" fill="none" stroke-linecap="round"/>
+  <path d="M 35 42 Q 15 35 25 20" stroke="#d49a00" stroke-width="3" fill="none" stroke-linecap="round"/>
+  <path d="M 85 42 Q 105 35 95 20" stroke="#d49a00" stroke-width="3" fill="none" stroke-linecap="round"/>
+  <text x="60" y="100" text-anchor="middle" font-size="10" fill="#b35900" font-family="sans-serif" font-weight="bold">大肥鱼</text>
+</svg>

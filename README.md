@@ -50,13 +50,7 @@ git clone https://github.com/777Fern777/dsh-pet-voice.git
 
 下载 Release 里的 `.zip`，解压到任意目录，按方式 A 的第二步做 `link:` 安装。
 
-### 方式 C：npm
 
-```bash
-npm i @pet-fish/dsh-pet-voice
-```
-
-> 这个包目前没有发布到 npm registry，`@pet-fish` 作用域只是本地占位。要走 npm 分发请先自己 `npm publish`，并把 `package.json` 里的 `repository` 填成你的仓库。
 
 ## 用法
 
